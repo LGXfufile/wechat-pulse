@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import "./styles.css";
 import "./editor.css";
+import "./watch.css";
 
 const fallback = [
   {
@@ -235,12 +236,47 @@ function App() {
     [status, setStatus] = useState("loading"),
     [updated, setUpdated] = useState(""),
     [selected, setSelected] = useState(null),
-    [toast, setToast] = useState("");
+    [toast, setToast] = useState(""),
+    [watchInput, setWatchInput] = useState(""),
+    [watchlist, setWatchlist] = useState(() => {
+      try {
+        return (
+          JSON.parse(localStorage.getItem("pulse-watchlist")) || [
+            "AI",
+            "出海",
+            "创业",
+          ]
+        );
+      } catch {
+        return ["AI", "出海", "创业"];
+      }
+    });
   const load = () => {
     setStatus("loading");
     api("/api/trends")
       .then((x) => {
-        setTopics(x.topics);
+        let previous = {};
+        try {
+          previous = JSON.parse(localStorage.getItem("pulse-snapshot")) || {};
+        } catch {}
+        const next = x.topics.map((topic) => {
+          const old = previous[topic.id];
+          const delta = old == null ? null : topic.score - old;
+          return {
+            ...topic,
+            growth:
+              delta == null
+                ? topic.growth
+                : delta === 0
+                  ? "本轮持平"
+                  : `${delta > 0 ? "+" : ""}${delta} 分`,
+          };
+        });
+        localStorage.setItem(
+          "pulse-snapshot",
+          JSON.stringify(Object.fromEntries(next.map((x) => [x.id, x.score]))),
+        );
+        setTopics(next);
         setUpdated(x.updatedAt);
         setStatus("ready");
       })
@@ -251,10 +287,27 @@ function App() {
     () => ({
       total: topics.length,
       rising: topics.filter((x) => x.score >= 80).length,
-      match: topics.filter((x) => /AI|科技|商业/.test(x.tag)).length,
+      match: topics.filter((x) =>
+        watchlist.some((k) =>
+          `${x.title} ${x.tag}`.toLowerCase().includes(k.toLowerCase()),
+        ),
+      ).length,
     }),
-    [topics],
+    [topics, watchlist],
   );
+  const addWatch = () => {
+    const keyword = watchInput.trim();
+    if (!keyword || watchlist.includes(keyword)) return;
+    const next = [...watchlist, keyword];
+    setWatchlist(next);
+    localStorage.setItem("pulse-watchlist", JSON.stringify(next));
+    setWatchInput("");
+  };
+  const removeWatch = (keyword) => {
+    const next = watchlist.filter((x) => x !== keyword);
+    setWatchlist(next);
+    localStorage.setItem("pulse-watchlist", JSON.stringify(next));
+  };
   const generate = () =>
     setSelected(
       query.trim() ? { title: query.trim(), source: "自定义主题" } : topics[0],
@@ -313,7 +366,7 @@ function App() {
             </div>
             <div>
               <strong>{stats.match}</strong>
-              <span>创作方向匹配</span>
+              <span>命中监控主题</span>
             </div>
             <div className="wave">
               <svg viewBox="0 0 300 62">
@@ -334,6 +387,27 @@ function App() {
               部分热点源连接失败，点击右上角重新同步。
             </div>
           )}
+        </section>
+        <section className="watchbar">
+          <div>
+            <Radio size={16} />
+            <b>主题监控</b>
+            {watchlist.map((k) => (
+              <button key={k} onClick={() => removeWatch(k)} title="点击移除">
+                {k}
+                <span>×</span>
+              </button>
+            ))}
+          </div>
+          <label>
+            <input
+              value={watchInput}
+              onChange={(e) => setWatchInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && addWatch()}
+              placeholder="添加监控词"
+            />
+            <button onClick={addWatch}>添加</button>
+          </label>
         </section>
         <div className="sectionHead">
           <div>

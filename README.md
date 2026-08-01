@@ -18,5 +18,6 @@ npm run dev
 - `CRON_SECRET`：定时监控鉴权
 - `FEISHU_WEBHOOK_URL`：热点预警机器人
 - `ALERT_SCORE`：预警阈值，默认 88
+- `MONITOR_KEYWORDS`：逗号分隔的监控主题；留空表示监控全部领域
 
 密钥仅由服务端读取，不写入前端或 Git。发布时服务端自动准备并上传封面素材；默认保存草稿，用户明确确认后才提交发布。

@@ -1,0 +1,61 @@
+.watchbar {
+  margin-top: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #101310;
+  padding: 10px 12px;
+}
+.watchbar > div,
+.watchbar label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.watchbar > div > svg {
+  color: var(--lime);
+}
+.watchbar b {
+  font-size: 11px;
+  margin-right: 5px;
+}
+.watchbar > div button {
+  background: #20251f;
+  color: #aab2aa;
+  border-radius: 7px;
+  padding: 5px 8px;
+  font-size: 10px;
+}
+.watchbar > div button span {
+  color: #66705f;
+  margin-left: 6px;
+}
+.watchbar input {
+  width: 120px;
+  background: #0a0d0b;
+  border: 1px solid #303630;
+  color: #fff;
+  padding: 6px 8px;
+  border-radius: 7px;
+  font-size: 10px;
+  outline: 0;
+}
+.watchbar label button {
+  background: var(--lime);
+  color: #111;
+  padding: 6px 10px;
+  border-radius: 7px;
+  font-size: 10px;
+}
+@media (max-width: 850px) {
+  .watchbar {
+    align-items: flex-start;
+    gap: 10px;
+    flex-direction: column;
+  }
+  .watchbar > div {
+    flex-wrap: wrap;
+  }
+}
