@@ -67,6 +67,49 @@
   display: grid;
   gap: 8px;
 }
+.radarFilters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.radarFilters label {
+  height: 38px;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #0e110f;
+  padding: 0 11px;
+}
+.radarFilters label svg {
+  width: 14px;
+  color: #727a73;
+}
+.radarFilters input {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  outline: 0;
+  font-size: 11px;
+}
+.radarFilters select {
+  height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #111412;
+  color: #aab1aa;
+  padding: 0 10px;
+  font-size: 10px;
+}
+.radarFilters > span {
+  color: #656d66;
+  font-size: 10px;
+  white-space: nowrap;
+}
 .radarList article {
   display: grid;
   grid-template-columns: 42px 1fr 24px;
@@ -510,5 +553,14 @@
   }
   .radarList article {
     grid-template-columns: 30px 1fr 18px;
+  }
+  .radarFilters {
+    flex-wrap: wrap;
+  }
+  .radarFilters label {
+    flex-basis: 100%;
+  }
+  .radarFilters select {
+    flex: 1;
   }
 }

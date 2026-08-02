@@ -16,15 +16,20 @@ import {
   Radio,
   RefreshCw,
   Search,
+  Save,
   Settings2,
+  ShieldCheck,
+  Smartphone,
   Sparkles,
   TrendingUp,
   Zap,
 } from "lucide-react";
+import { getTemplates, toWechatHtml } from "./format.js";
 import "./styles.css";
 import "./editor.css";
 import "./watch.css";
 import "./pages.css";
+import "./editor-v2.css";
 
 const fallback = [
   {
@@ -109,8 +114,47 @@ function Editor({ topic, style, onClose, onNotice, onGenerated }) {
   const [phase, setPhase] = useState("generating"),
     [article, setArticle] = useState(null),
     [selectedTitle, setSelectedTitle] = useState(""),
+    [editableContent, setEditableContent] = useState(""),
+    [editableDigest, setEditableDigest] = useState(""),
+    [template, setTemplate] = useState("minimal"),
+    [editorMode, setEditorMode] = useState("write"),
+    [assetId] = useState(() => crypto.randomUUID()),
     [error, setError] = useState(""),
     [publishing, setPublishing] = useState(false);
+  const wordCount = editableContent.replace(/\s/g, "").length;
+  const qualityChecks = [
+    {
+      label: "标题长度适中",
+      ok: selectedTitle.length >= 12 && selectedTitle.length <= 64,
+    },
+    { label: "正文不少于 800 字", ok: wordCount >= 800 },
+    {
+      label: "包含清晰段落结构",
+      ok: (editableContent.match(/^#{2,3} /gm) || []).length >= 2,
+    },
+    { label: "已完成风险扫描", ok: Boolean(article?.riskNotes) },
+    {
+      label: "包含可核验信源",
+      ok: (article?.citations?.length || 0) > 0 || !topic.url,
+    },
+  ];
+  const qualityScore = qualityChecks.filter((x) => x.ok).length * 20;
+  const saveCurrent = () =>
+    onGenerated?.({
+      ...(article || {}),
+      id: assetId,
+      topic: topic.title || topic,
+      titles: [
+        selectedTitle,
+        ...(article?.titles || []).filter((t) => t !== selectedTitle),
+      ],
+      digest: editableDigest,
+      content: editableContent,
+      template,
+      style,
+      createdAt: new Date().toISOString(),
+      status: "draft",
+    });
   useEffect(() => {
     api("/api/generate", {
       method: "POST",
@@ -124,9 +168,11 @@ function Editor({ topic, style, onClose, onNotice, onGenerated }) {
       .then((x) => {
         setArticle(x.article);
         setSelectedTitle(x.article.titles?.[0] || topic.title || topic);
+        setEditableContent(x.article.content || "");
+        setEditableDigest(x.article.digest || "");
         onGenerated?.({
           ...x.article,
-          id: crypto.randomUUID(),
+          id: assetId,
           topic: topic.title || topic,
           style,
           createdAt: new Date().toISOString(),
@@ -143,13 +189,15 @@ function Editor({ topic, style, onClose, onNotice, onGenerated }) {
     setPublishing(true);
     setError("");
     try {
+      saveCurrent();
       const x = await api("/api/wechat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: selectedTitle || article.titles?.[0] || topic.title,
-          digest: article.digest,
-          content: article.content,
+          digest: editableDigest,
+          content: editableContent,
+          template,
           sourceUrl: topic.url,
           action,
         }),
@@ -197,12 +245,51 @@ function Editor({ topic, style, onClose, onNotice, onGenerated }) {
               </span>
               <div>
                 <small>{style} · 已完成事实边界检查</small>
-                <h2>{article.titles?.[0] || topic.title}</h2>
-                <p>{article.digest}</p>
+                <h2>{selectedTitle || topic.title}</h2>
+                <p>{editableDigest}</p>
               </div>
             </div>
             <div className="editorGrid">
               <div className="articlePreview">
+                <div className="editorToolbar">
+                  <div>
+                    <button
+                      className={editorMode === "write" ? "active" : ""}
+                      onClick={() => setEditorMode("write")}
+                    >
+                      <PenLine />
+                      编辑
+                    </button>
+                    <button
+                      className={editorMode === "preview" ? "active" : ""}
+                      onClick={() => setEditorMode("preview")}
+                    >
+                      <Smartphone />
+                      微信预览
+                    </button>
+                  </div>
+                  <select
+                    value={template}
+                    onChange={(e) => setTemplate(e.target.value)}
+                    aria-label="排版模板"
+                  >
+                    {getTemplates().map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.label}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    className="saveDraft"
+                    onClick={() => {
+                      saveCurrent();
+                      onNotice("修改已保存到内容资产");
+                    }}
+                  >
+                    <Save />
+                    保存
+                  </button>
+                </div>
                 <div className="titleOptions">
                   {article.titles?.map((t, i) => (
                     <button
@@ -214,38 +301,75 @@ function Editor({ topic, style, onClose, onNotice, onGenerated }) {
                     </button>
                   ))}
                 </div>
-                <pre>{article.content}</pre>
+                {editorMode === "write" ? (
+                  <div className="writingSurface">
+                    <label>
+                      文章摘要
+                      <textarea
+                        value={editableDigest}
+                        onChange={(e) => setEditableDigest(e.target.value)}
+                        maxLength={120}
+                      />
+                      <small>{editableDigest.length}/120</small>
+                    </label>
+                    <label>
+                      正文 Markdown
+                      <textarea
+                        className="bodyEditor"
+                        value={editableContent}
+                        onChange={(e) => setEditableContent(e.target.value)}
+                      />
+                      <small>{wordCount} 字</small>
+                    </label>
+                  </div>
+                ) : (
+                  <div className="phonePreview">
+                    <div className="phoneTop">
+                      <span>9:41</span>
+                      <b>公众号预览</b>
+                      <span>•••</span>
+                    </div>
+                    <article>
+                      <h1>{selectedTitle}</h1>
+                      <small>光新工作室 · 今天</small>
+                      <div
+                        dangerouslySetInnerHTML={{
+                          __html: toWechatHtml(editableContent, template),
+                        }}
+                      />
+                    </article>
+                  </div>
+                )}
               </div>
               <div className="publishPanel">
-                <h3>发布前检查</h3>
+                <div className="qualityScore">
+                  <ShieldCheck />
+                  <span>
+                    <small>发布质量</small>
+                    <b>{qualityScore}</b>
+                  </span>
+                </div>
                 <ul>
-                  <li>
-                    <Check />
-                    标题与摘要已生成
-                  </li>
-                  <li>
-                    <Check />
-                    引用信源 {article.citations?.length || 0} 个
-                  </li>
-                  <li>
-                    <Check />
-                    风险提示 {article.riskNotes?.length || 0} 项
-                  </li>
-                  <li>
-                    <Check />
-                    封面将自动上传素材库
-                  </li>
+                  {qualityChecks.map((item) => (
+                    <li className={item.ok ? "pass" : "fail"} key={item.label}>
+                      {item.ok ? <Check /> : <AlertCircle />}
+                      {item.label}
+                    </li>
+                  ))}
                 </ul>
                 {article.riskNotes?.length > 0 && (
                   <div className="risk">{article.riskNotes.join("；")}</div>
                 )}
-                <button disabled={publishing} onClick={() => publish("draft")}>
+                <button
+                  disabled={publishing || qualityScore < 60}
+                  onClick={() => publish("draft")}
+                >
                   <BookOpen />
                   {publishing ? "正在上传并提交…" : "一键保存到草稿箱"}
                 </button>
                 <button
                   className="direct"
-                  disabled={publishing}
+                  disabled={publishing || qualityScore < 60}
                   onClick={() => publish("publish")}
                 >
                   确认并一键发布
@@ -268,6 +392,9 @@ function App() {
     ),
     [style, setStyle] = useState("深度洞察"),
     [query, setQuery] = useState(""),
+    [radarSearch, setRadarSearch] = useState(""),
+    [radarSource, setRadarSource] = useState("all"),
+    [radarSort, setRadarSort] = useState("score"),
     [topics, setTopics] = useState(fallback),
     [status, setStatus] = useState("loading"),
     [updated, setUpdated] = useState(""),
@@ -339,7 +466,10 @@ function App() {
   };
   const saveAsset = (item) => {
     setAssets((current) => {
-      const next = [item, ...current].slice(0, 30);
+      const next = [item, ...current.filter((x) => x.id !== item.id)].slice(
+        0,
+        30,
+      );
       localStorage.setItem("pulse-assets", JSON.stringify(next));
       return next;
     });
@@ -355,6 +485,21 @@ function App() {
       ).length,
     }),
     [topics, watchlist],
+  );
+  const radarTopics = useMemo(
+    () =>
+      topics
+        .filter(
+          (t) =>
+            (radarSource === "all" || t.source.startsWith(radarSource)) &&
+            `${t.title} ${t.tag}`
+              .toLowerCase()
+              .includes(radarSearch.toLowerCase()),
+        )
+        .sort((a, b) =>
+          radarSort === "signal" ? b.signal - a.signal : b.score - a.score,
+        ),
+    [topics, radarSearch, radarSource, radarSort],
   );
   const addWatch = () => {
     const keyword = watchInput.trim();
@@ -604,8 +749,36 @@ function App() {
                 刷新数据
               </button>
             </div>
+            <div className="radarFilters">
+              <label>
+                <Search />
+                <input
+                  value={radarSearch}
+                  onChange={(e) => setRadarSearch(e.target.value)}
+                  placeholder="搜索话题或领域"
+                />
+              </label>
+              <select
+                value={radarSource}
+                onChange={(e) => setRadarSource(e.target.value)}
+                aria-label="热点来源"
+              >
+                <option value="all">全部来源</option>
+                <option value="Hacker News">海外 · Hacker News</option>
+                <option value="V2EX">国内 · V2EX</option>
+              </select>
+              <select
+                value={radarSort}
+                onChange={(e) => setRadarSort(e.target.value)}
+                aria-label="排序方式"
+              >
+                <option value="score">按热度排序</option>
+                <option value="signal">按传播指数排序</option>
+              </select>
+              <span>{radarTopics.length} 条结果</span>
+            </div>
             <div className="radarList">
-              {topics.map((t, i) => (
+              {radarTopics.map((t, i) => (
                 <article
                   key={t.id}
                   onClick={() => {

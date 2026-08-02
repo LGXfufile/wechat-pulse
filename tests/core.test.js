@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { normalize } from "../api/trends.js";
 import { buildPrompt } from "../api/generate.js";
-import { toWechatHtml } from "../api/wechat.js";
+import { toWechatHtml, getTemplates } from "../src/format.js";
 test("热点评分生成完整字段", () => {
   const [x] = normalize([
     {
@@ -31,7 +31,15 @@ test("生成提示词包含风格、信源与事实约束", () => {
 });
 test("微信 HTML 转义危险标签", () => {
   const x = toWechatHtml("## 标题\n<script>alert(1)</script>\n**重点**");
-  assert.match(x, /<h2>标题<\/h2>/);
+  assert.match(x, /<h2[^>]*>标题<\/h2>/);
   assert.doesNotMatch(x, /<script>/);
   assert.match(x, /<strong>重点<\/strong>/);
+  assert.match(x, /data-template="minimal"/);
+});
+test("微信排版模板均可生成内联样式", () => {
+  for (const template of getTemplates()) {
+    const html = toWechatHtml("## 标题\n> 引用", template.id);
+    assert.match(html, /style=/);
+    assert.match(html, new RegExp(`data-template="${template.id}"`));
+  }
 });

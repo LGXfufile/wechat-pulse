@@ -1,4 +1,5 @@
 import { fetchJson, json, readBody, requirePost } from "./_shared.js";
+import { toWechatHtml } from "../src/format.js";
 
 async function token() {
   const appid = process.env.WECHAT_APP_ID,
@@ -41,24 +42,6 @@ async function uploadCover(accessToken, coverUrl) {
   return data.media_id;
 }
 
-export function toWechatHtml(markdown = "") {
-  return markdown
-    .split("\n")
-    .map((line) => {
-      const safe = line
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
-      if (safe.startsWith("### ")) return `<h3>${safe.slice(4)}</h3>`;
-      if (safe.startsWith("## ")) return `<h2>${safe.slice(3)}</h2>`;
-      if (safe.startsWith("# ")) return `<h1>${safe.slice(2)}</h1>`;
-      if (!safe.trim()) return "<p><br/></p>";
-      return `<p>${safe}</p>`;
-    })
-    .join("");
-}
-
 export default async function handler(req, res) {
   if (!requirePost(req, res)) return;
   const body = await readBody(req);
@@ -79,7 +62,7 @@ export default async function handler(req, res) {
               title: body.title.slice(0, 64),
               author: body.author || "",
               digest: (body.digest || "").slice(0, 120),
-              content: toWechatHtml(body.content),
+              content: toWechatHtml(body.content, body.template),
               content_source_url: body.sourceUrl || "",
               thumb_media_id: thumbMediaId,
               need_open_comment: 1,
