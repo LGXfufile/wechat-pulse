@@ -1,0 +1,9 @@
+@media (max-width: 850px) {
+  .editorGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .articlePreview {
+    min-width: 0;
+  }
+}

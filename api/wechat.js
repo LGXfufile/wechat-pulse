@@ -42,6 +42,23 @@ async function uploadCover(accessToken, coverUrl) {
   return data.media_id;
 }
 
+async function uploadContentImage(accessToken, illustration) {
+  const match = illustration.dataUrl?.match(/^data:image\/(png|jpeg);base64,(.+)$/);
+  if (!match) throw new Error(`配图“${illustration.headline || illustration.id}”格式无效`);
+  const bytes = Buffer.from(match[2], "base64");
+  if (bytes.byteLength > 10 * 1024 * 1024) throw new Error("单张文章配图不能超过 10MB");
+  const extension = match[1] === "png" ? "png" : "jpg";
+  const form = new FormData();
+  form.append("media", new Blob([bytes], { type: `image/${match[1]}` }), `${illustration.id}.${extension}`);
+  const response = await fetch(
+    `https://api.weixin.qq.com/cgi-bin/media/uploadimg?access_token=${accessToken}`,
+    { method: "POST", body: form },
+  );
+  const data = await response.json();
+  if (!data.url) throw new Error(data.errmsg || "上传微信正文配图失败");
+  return { ...illustration, dataUrl: undefined, url: data.url };
+}
+
 export default async function handler(req, res) {
   if (!requirePost(req, res)) return;
   const body = await readBody(req);
@@ -51,6 +68,9 @@ export default async function handler(req, res) {
     const accessToken = await token();
     const thumbMediaId =
       body.thumbMediaId || (await uploadCover(accessToken, body.coverUrl));
+    const uploadedIllustrations = await Promise.all(
+      (body.illustrations || []).slice(0, 5).map((item) => uploadContentImage(accessToken, item)),
+    );
     const draft = await fetchJson(
       `https://api.weixin.qq.com/cgi-bin/draft/add?access_token=${accessToken}`,
       {
@@ -62,7 +82,7 @@ export default async function handler(req, res) {
               title: body.title.slice(0, 64),
               author: body.author || "",
               digest: (body.digest || "").slice(0, 120),
-              content: toWechatHtml(body.content, body.template),
+              content: toWechatHtml(body.content, body.template, uploadedIllustrations),
               content_source_url: body.sourceUrl || "",
               thumb_media_id: thumbMediaId,
               need_open_comment: 1,

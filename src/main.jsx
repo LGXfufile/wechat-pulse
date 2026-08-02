@@ -10,6 +10,7 @@ import {
   Clock,
   FileText,
   Flame,
+  Image,
   LayoutDashboard,
   LoaderCircle,
   PenLine,
@@ -25,11 +26,18 @@ import {
   Zap,
 } from "lucide-react";
 import { getTemplates, toWechatHtml } from "./format.js";
+import {
+  generateIllustrations,
+  insertIllustrationMarkers,
+  visualStyles,
+} from "./illustrations.js";
 import "./styles.css";
 import "./editor.css";
 import "./watch.css";
 import "./pages.css";
 import "./editor-v2.css";
+import "./illustrations.css";
+import "./mobile-fixes.css";
 
 const fallback = [
   {
@@ -117,6 +125,11 @@ function Editor({ topic, style, onClose, onNotice, onGenerated }) {
     [editableContent, setEditableContent] = useState(""),
     [editableDigest, setEditableDigest] = useState(""),
     [template, setTemplate] = useState("minimal"),
+    [visualStyle, setVisualStyle] = useState(
+      style === "犀利评论" ? "editorial" : style.includes("故事") || style.includes("温暖") ? "warm" : "signal",
+    ),
+    [illustrations, setIllustrations] = useState([]),
+    [imageSeed, setImageSeed] = useState(0),
     [editorMode, setEditorMode] = useState("write"),
     [assetId] = useState(() => crypto.randomUUID()),
     [error, setError] = useState(""),
@@ -137,8 +150,19 @@ function Editor({ topic, style, onClose, onNotice, onGenerated }) {
       label: "包含可核验信源",
       ok: (article?.citations?.length || 0) > 0 || !topic.url,
     },
+    {
+      label: `配图编排完整（${illustrations.length} 张）`,
+      ok: illustrations.length >= 2 && illustrations.every((item) => editableContent.includes(`{{IMAGE:${item.id}}}`)),
+    },
   ];
-  const qualityScore = qualityChecks.filter((x) => x.ok).length * 20;
+  const qualityScore = Math.round((qualityChecks.filter((x) => x.ok).length / qualityChecks.length) * 100);
+  const rebuildIllustrations = (content, title, nextStyle = visualStyle, nextSeed = imageSeed) => {
+    const cleanContent = content.replace(/^\{\{IMAGE:[^}]+\}\}\s*$/gm, "").replace(/\n{3,}/g, "\n\n");
+    const next = generateIllustrations(cleanContent, title, nextStyle, nextSeed);
+    setIllustrations(next);
+    setEditableContent(insertIllustrationMarkers(cleanContent, next));
+    return next;
+  };
   const saveCurrent = () =>
     onGenerated?.({
       ...(article || {}),
@@ -151,6 +175,8 @@ function Editor({ topic, style, onClose, onNotice, onGenerated }) {
       digest: editableDigest,
       content: editableContent,
       template,
+      visualStyle,
+      illustrations,
       style,
       createdAt: new Date().toISOString(),
       status: "draft",
@@ -166,12 +192,19 @@ function Editor({ topic, style, onClose, onNotice, onGenerated }) {
       }),
     })
       .then((x) => {
+        const articleTitle = x.article.titles?.[0] || topic.title || topic;
+        const nextIllustrations = generateIllustrations(x.article.content || "", articleTitle, visualStyle, 0);
+        const markedContent = insertIllustrationMarkers(x.article.content || "", nextIllustrations);
         setArticle(x.article);
-        setSelectedTitle(x.article.titles?.[0] || topic.title || topic);
-        setEditableContent(x.article.content || "");
+        setSelectedTitle(articleTitle);
+        setIllustrations(nextIllustrations);
+        setEditableContent(markedContent);
         setEditableDigest(x.article.digest || "");
         onGenerated?.({
           ...x.article,
+          content: markedContent,
+          illustrations: nextIllustrations,
+          visualStyle,
           id: assetId,
           topic: topic.title || topic,
           style,
@@ -198,6 +231,7 @@ function Editor({ topic, style, onClose, onNotice, onGenerated }) {
           digest: editableDigest,
           content: editableContent,
           template,
+          illustrations,
           sourceUrl: topic.url,
           action,
         }),
@@ -290,6 +324,46 @@ function Editor({ topic, style, onClose, onNotice, onGenerated }) {
                     保存
                   </button>
                 </div>
+                <section className="illustrationPlanner">
+                  <div className="illustrationHead">
+                    <span>
+                      <Image />
+                      <b>智能配图</b>
+                      <small>已按文章结构规划 {illustrations.length} 张</small>
+                    </span>
+                    <div>
+                      <select
+                        value={visualStyle}
+                        onChange={(e) => {
+                          const nextStyle = e.target.value;
+                          setVisualStyle(nextStyle);
+                          rebuildIllustrations(editableContent, selectedTitle, nextStyle, imageSeed + 1);
+                          setImageSeed((value) => value + 1);
+                        }}
+                        aria-label="配图视觉风格"
+                      >
+                        {visualStyles.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+                      </select>
+                      <button
+                        onClick={() => {
+                          const nextSeed = imageSeed + 1;
+                          setImageSeed(nextSeed);
+                          rebuildIllustrations(editableContent, selectedTitle, visualStyle, nextSeed);
+                        }}
+                      >
+                        <RefreshCw />整组重绘
+                      </button>
+                    </div>
+                  </div>
+                  <div className="illustrationStrip">
+                    {illustrations.map((item) => (
+                      <figure key={item.id}>
+                        <img src={item.dataUrl} alt={item.headline} />
+                        <figcaption><b>{item.eyebrow}</b><span>{item.headline}</span></figcaption>
+                      </figure>
+                    ))}
+                  </div>
+                </section>
                 <div className="titleOptions">
                   {article.titles?.map((t, i) => (
                     <button
@@ -334,7 +408,7 @@ function Editor({ topic, style, onClose, onNotice, onGenerated }) {
                       <small>光新工作室 · 今天</small>
                       <div
                         dangerouslySetInnerHTML={{
-                          __html: toWechatHtml(editableContent, template),
+                          __html: toWechatHtml(editableContent, template, illustrations),
                         }}
                       />
                     </article>
@@ -361,7 +435,7 @@ function Editor({ topic, style, onClose, onNotice, onGenerated }) {
                   <div className="risk">{article.riskNotes.join("；")}</div>
                 )}
                 <button
-                  disabled={publishing || qualityScore < 60}
+                  disabled={publishing || qualityScore < 70}
                   onClick={() => publish("draft")}
                 >
                   <BookOpen />
@@ -369,7 +443,7 @@ function Editor({ topic, style, onClose, onNotice, onGenerated }) {
                 </button>
                 <button
                   className="direct"
-                  disabled={publishing || qualityScore < 60}
+                  disabled={publishing || qualityScore < 70}
                   onClick={() => publish("publish")}
                 >
                   确认并一键发布

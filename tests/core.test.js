@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { normalize } from "../api/trends.js";
 import { buildPrompt } from "../api/generate.js";
 import { toWechatHtml, getTemplates } from "../src/format.js";
+import { insertIllustrationMarkers, planIllustrations } from "../src/illustrations.js";
 test("热点评分生成完整字段", () => {
   const [x] = normalize([
     {
@@ -42,4 +43,17 @@ test("微信排版模板均可生成内联样式", () => {
     assert.match(html, /style=/);
     assert.match(html, new RegExp(`data-template="${template.id}"`));
   }
+});
+test("配图数量随文章长度规划且不超过五张", () => {
+  const content = `## 第一章\n${"正文".repeat(250)}\n## 第二章\n${"正文".repeat(250)}\n## 第三章\n${"正文".repeat(250)}`;
+  const plans = planIllustrations(content, "测试标题", "signal");
+  assert.equal(plans.length, 3);
+  assert.ok(plans.every((item) => item.visualStyle === "signal"));
+  const marked = insertIllustrationMarkers(content, plans);
+  assert.equal((marked.match(/\{\{IMAGE:/g) || []).length, 3);
+});
+test("微信预览会渲染带说明的文章配图", () => {
+  const html = toWechatHtml("## 标题\n{{IMAGE:ill-1}}", "minimal", [{ id: "ill-1", dataUrl: "data:image/jpeg;base64,abc", caption: "核心观点", headline: "趋势" }]);
+  assert.match(html, /<figure data-image-id="ill-1"/);
+  assert.match(html, /核心观点/);
 });

@@ -24,12 +24,21 @@ const inline = (value) =>
   escape(value)
     .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
     .replace(/\[(\d+)\]/g, '<sup style="color:#999;font-size:10px">[$1]</sup>');
-export function toWechatHtml(markdown = "", template = "minimal") {
+export function toWechatHtml(markdown = "", template = "minimal", illustrations = []) {
   const theme = themes[template] || themes.minimal;
+  const illustrationMap = new Map(illustrations.map((item) => [item.id, item]));
   const body = markdown
     .split("\n")
     .map((line) => {
       const value = line.trim();
+      const marker = value.match(/^\{\{IMAGE:([^}]+)\}\}$/);
+      if (marker) {
+        const illustration = illustrationMap.get(marker[1]);
+        if (!illustration) return `<!--IMAGE:${marker[1]}-->`;
+        const src = illustration.url || illustration.dataUrl || "";
+        if (!/^(data:image\/(?:png|jpeg);base64,|https:\/\/)/.test(src)) return "";
+        return `<figure data-image-id="${escape(illustration.id)}" style="margin:24px 0 28px"><img src="${src}" alt="${escape(illustration.headline || illustration.caption || "文章配图")}" style="display:block;width:100%;height:auto;border-radius:10px"/><figcaption style="margin-top:8px;color:${theme.muted};font-size:11px;line-height:1.6;text-align:center">${inline(illustration.caption || "")}</figcaption></figure>`;
+      }
       if (value.startsWith("### "))
         return `<h3 style="margin:26px 0 10px;color:${theme.accent};font-size:17px;line-height:1.5">${inline(value.slice(4))}</h3>`;
       if (value.startsWith("## "))
